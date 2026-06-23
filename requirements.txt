@@ -1,0 +1,4 @@
+mcp
+anthropic
+ollama
+python-dotenv

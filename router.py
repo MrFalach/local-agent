@@ -39,4 +39,5 @@ def route(prompt: str) -> str:
     if len(prompt) > 400:
         cloud_score += 2
 
+    # שוויון (כולל 0/0) → מקומי: ברירת מחדל חסכונית
     return "cloud" if cloud_score > local_score else "local"

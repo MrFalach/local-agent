@@ -29,7 +29,7 @@ PROJECT_CONFIG = Path.cwd() / ".local-agent.json"
 # prompt ב-0/0 (לא מזוהה/עמום) מקבל score=0.5, ולכן:
 #   quality(0.25)→ענן,  cost(0.6)→מקומי,  balanced/speed(0.45)→ענן.
 PRIORITY_PROFILES = {
-    "quality":  {"cloud_threshold": 0.25, "timeout": 60.0, "chain": True},
+    "quality":  {"cloud_threshold": 0.25, "timeout": 60.0, "chain": True},   # Opus שמור ל-max בעתיד
     "cost":     {"cloud_threshold": 0.60, "timeout": 45.0, "chain": True},
     "speed":    {"cloud_threshold": 0.45, "timeout": 30.0, "chain": False},
     "balanced": {"cloud_threshold": 0.45, "timeout": 45.0, "chain": True},
@@ -38,7 +38,7 @@ PRIORITY_PROFILES = {
 DEFAULTS = {
     "priority":        "cost",                    # קדימות ברירת המחדל של Sagi: איכות-תקרה ואז חיסכון
     "local_model":     "qwen2.5-coder:7b",
-    "cloud_model":     "claude-sonnet-4-6",
+    "cloud_model":     "claude-sonnet-4-6",   # quality גם על סונט; Opus רק ל-max בעתיד
     "telemetry":       True,
     # שדות אופציונליים שגוברים על מה ש-priority גזר (None = "תגזור מ-priority"):
     "cloud_threshold": None,

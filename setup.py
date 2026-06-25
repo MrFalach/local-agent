@@ -174,16 +174,28 @@ def _is_installed(tag: str, installed: list[str]) -> bool:
     return any(base in m for m in installed)
 
 
-def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "Q. Local model") -> str:
-    """
-    Build a model selection list from:
-      1. Hardware-recommended model (top, with ← recommended tag)
-      2. Other installed models compatible with this machine
-      3. Uninstalled catalog models compatible with this machine
-      4. Cloud-only option
+def _describe(tags: list[str]) -> str:
+    if "math" in tags or "reasoning" in tags:
+        return "math & reasoning"
+    if "code" in tags:
+        return "best for coding"
+    if "data" in tags:
+        return "general & data analysis"
+    return "general purpose"
 
-    Shows [code] / [general] / [math] tags and [↓ XGB] for uninstalled models.
-    Runs `ollama pull` automatically if the user picks an uninstalled model.
+
+def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "Q") -> str:
+    """
+    Display a grouped model menu:
+      ── installed ──────────────────
+       1) model-name   description      ★ recommended
+      ── available to download ──────
+       2) model-name   description      X GB
+      ── skip local ─────────────────
+       N) none — cloud only
+
+    Only shows models that fit the machine's RAM.
+    Runs `ollama pull` automatically when the user picks an uninstalled model.
     """
     if not ollama_up:
         print(f"{q_label}: Ollama not running → cloud-only mode.")
@@ -191,58 +203,103 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
 
     ram_gb = hw["ram_gb"]
     recommended = hw["model"]
-    tier = hw["tier"]
+    chip = hw["chip"] or f"{ram_gb:.0f}GB RAM"
 
-    opts: list[tuple[str, str]] = []
-    seen_bases: set[str] = set()
+    installed_opts:    list[tuple[str, str, bool]] = []   # (tag, desc, is_recommended)
+    downloadable_opts: list[tuple[str, str, str]]  = []   # (tag, desc, size)
+    seen_installed_tags: set[str] = set()
+    installed_bases:     set[str] = set()   # families already shown as installed
+    seen_download_bases: set[str] = set()   # families already shown as downloadable
 
-    def _tag_str(tags: list[str]) -> str:
-        return "/".join(tags)
-
-    # 1. Hardware-recommended model (always first)
+    # Recommended first (installed or not)
     if recommended:
-        base = recommended.split(":")[0]
-        seen_bases.add(base)
-        entry = _catalog_entry(recommended)
-        tags_s = _tag_str(entry[1]) if entry else "code"
-        installed = _is_installed(recommended, models)
-        status = "[installed]" if installed else f"[↓ {entry[2]}]" if entry else "[not installed]"
-        label = f"{recommended}  [{tags_s}]  ← recommended for {ram_gb:.0f}GB RAM  {status}"
-        opts.append((recommended, label))
+        rec_base = recommended.split(":")[0]
+        if _is_installed(recommended, models):
+            seen_installed_tags.add(recommended)
+            installed_bases.add(rec_base)
+            entry = _catalog_entry(recommended)
+            installed_opts.append((recommended, _describe(entry[1] if entry else ["code"]), True))
+        else:
+            seen_download_bases.add(rec_base)
+            entry = _catalog_entry(recommended)
+            size = entry[2] if entry else "?"
+            tags = entry[1] if entry else ["code"]
+            downloadable_opts.append((recommended, _describe(tags), size))
 
-    # 2. Other installed models that fit this machine
+    # Other installed models that fit
     for m in models:
-        base = m.split(":")[0]
-        if base in seen_bases:
+        if m in seen_installed_tags:
             continue
         entry = _catalog_entry(m)
         if entry and entry[0] > ram_gb:
-            continue  # too large for this machine
-        seen_bases.add(base)
-        tags_s = _tag_str(entry[1]) if entry else "general"
-        label = f"{m}  [{tags_s}]  [installed]"
-        opts.append((m, label))
-
-    # 3. Uninstalled catalog models that fit this machine
-    for tag, req, tags, size in MODEL_CATALOG:
-        base = tag.split(":")[0]
-        if base in seen_bases:
             continue
+        seen_installed_tags.add(m)
+        installed_bases.add(m.split(":")[0])
+        desc = _describe(entry[1]) if entry else "general purpose"
+        installed_opts.append((m, desc, False))
+
+    # Uninstalled catalog models that fit (skip families already installed)
+    for tag, req, tags, size in MODEL_CATALOG:
         if req > ram_gb:
             continue
-        seen_bases.add(base)
-        label = f"{tag}  [{_tag_str(tags)}]  [↓ {size}]"
-        opts.append((tag, label))
+        base = tag.split(":")[0]
+        if base in installed_bases or base in seen_download_bases:
+            continue
+        seen_download_bases.add(base)
+        downloadable_opts.append((tag, _describe(tags), size))
 
-    opts.append(("", "none — cloud only"))
+    # --- Print grouped menu ---
+    col_name = 28
+    col_desc = 26
+    print(f"\n{q_label}. Local model — {chip}:\n")
 
-    choice = ask_choice(f"{q_label} (free, runs locally):", opts, 0)
+    options: list[str] = []  # ordered list of model tags ("" = cloud only)
+
+    def _section(title: str) -> None:
+        bar = "─" * (col_name + col_desc + 4)
+        print(f"  ── {title} {bar[len(title)+4:]}")
+
+    if installed_opts:
+        _section("installed")
+        for tag, desc, is_rec in installed_opts:
+            n = len(options) + 1
+            options.append(tag)
+            rec = "  ★ recommended" if is_rec else ""
+            dflt = "  (default)" if n == 1 else ""
+            print(f"  {n:2}) {tag:<{col_name}} {desc:<{col_desc}}{rec}{dflt}")
+        print()
+
+    if downloadable_opts:
+        _section("available to download")
+        for tag, desc, size in downloadable_opts:
+            n = len(options) + 1
+            options.append(tag)
+            size_gb = size.replace("~", "").replace("GB", " GB")
+            dflt = "  (default)" if n == 1 else ""
+            print(f"  {n:2}) {tag:<{col_name}} {desc:<{col_desc}}  {size_gb}{dflt}")
+        print()
+
+    _section("skip local")
+    options.append("")
+    n = len(options)
+    print(f"  {n:2}) none — cloud only (Anthropic API)\n")
+
+    default_idx = 1  # always option 1
+    raw = ask(f"  Choose number", str(default_idx))
+    try:
+        idx = int(raw) - 1
+        if not (0 <= idx < len(options)):
+            idx = 0
+    except ValueError:
+        idx = 0
+
+    choice = options[idx]
 
     # Pull if not installed
     if choice and not _is_installed(choice, models):
         entry = _catalog_entry(choice)
         size_hint = f" ({entry[2]})" if entry else ""
-        if ask(f"  {choice}{size_hint} is not installed. Pull now? [y/N]", "N").lower() == "y":
+        if ask(f"\n  {choice}{size_hint} is not installed. Pull now? [y/N]", "N").lower() == "y":
             subprocess.run(["ollama", "pull", choice], check=False)
 
     return choice

@@ -68,12 +68,15 @@ def stats() -> str:
     latencies = [r["latency_ms"] for r in rows if "latency_ms" in r]
     cold = sum(1 for r in rows if r.get("cold_load"))
     errors = sum(1 for r in rows if not r.get("ok", True))
-    cloud_share = 100 * (total - by_provider.get("local", 0)) / total
+    pure_cloud = by_provider.get("cloud", 0)
+    chain_count = by_provider.get("chain", 0)
+    cloud_share = 100 * pure_cloud / total
+    chain_share = 100 * chain_count / total
 
     lines_out = [
         f"local-agent — סיכום {total} קריאות",
         f"  פיצול ספקים : " + ", ".join(f"{k}={v}" for k, v in sorted(by_provider.items())),
-        f"  נתח ענן     : {cloud_share:.0f}%",
+        f"  נתח ענן     : {cloud_share:.0f}%  (chain: {chain_share:.0f}%)",
         f"  זמן p50/p95 : {_pct(latencies, 50):.0f}ms / {_pct(latencies, 95):.0f}ms",
         f"  cold-loads  : {cold}",
         f"  שגיאות      : {errors}",

@@ -56,10 +56,12 @@ def _run(prompt: str, tool: str, forced: str | None) -> str:
             result = providers.ask_cloud(prompt, CFG)
         else:
             result = providers.ask_local(prompt, CFG)
-    except RuntimeError as e:
+    except Exception as e:
         ok, error = False, str(e)
         latency_ms = (time.perf_counter() - start) * 1000
         _log(tool, provider, decision, prompt, latency_ms, None, ok, error)
+        if not isinstance(e, RuntimeError):
+            raise RuntimeError(str(e)) from e
         raise
 
     latency_ms = (time.perf_counter() - start) * 1000
@@ -135,7 +137,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"כלי לא מוכר: {name}")]
 
     arg_key, forced = TOOL_MAP[name]
-    prompt = arguments[arg_key]
+    prompt = arguments.get(arg_key)
+    if not prompt:
+        return [TextContent(type="text", text=f"[ERROR] Missing required argument: {arg_key}")]
 
     try:
         result = await asyncio.wait_for(
@@ -146,14 +150,14 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         # timeout מקומי קצר משמעו שכנראה קרה swap — הסבר ובקש כפיית ענן.
         result = (f"[TIMEOUT] חריגה מ-{CFG.timeout:.0f} שניות. "
                   f"ייתכן שהמודל המקומי נטען מהדיסק — נסה שוב, או השתמש ב-cloud() למשימה זו.")
-    except RuntimeError as e:
+    except Exception as e:
         result = f"[ERROR] {e}"
 
     return [TextContent(type="text", text=result)]
 
 
 async def main():
-    providers.warm_up(CFG)  # מחמם את המודל המקומי כדי שהקריאה הראשונה לא תהיה cold-load
+    await asyncio.to_thread(providers.warm_up, CFG)  # מחמם את המודל המקומי (blocking I/O → thread)
     async with stdio_server() as (r, w):
         await app.run(r, w, app.create_initialization_options())
 

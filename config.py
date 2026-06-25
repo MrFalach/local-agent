@@ -36,7 +36,7 @@ PRIORITY_PROFILES = {
 }
 
 DEFAULTS = {
-    "priority":        "cost",                    # קדימות ברירת המחדל של Sagi: איכות-תקרה ואז חיסכון
+    "priority":        "cost",
     "local_model":     "qwen2.5-coder:7b",
     "cloud_model":     "claude-sonnet-4-6",   # quality גם על סונט; Opus רק ל-max בעתיד
     "telemetry":       True,

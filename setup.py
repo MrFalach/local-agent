@@ -145,6 +145,7 @@ def write_key(key: str) -> None:
                  if not ln.startswith("ANTHROPIC_API_KEY=")]
     lines.append(f"ANTHROPIC_API_KEY={key}")
     env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env.chmod(0o600)
 
 
 def register(scope: str) -> None:
@@ -171,7 +172,7 @@ def _catalog_entry(tag: str) -> tuple[int, list[str], str] | None:
 
 def _is_installed(tag: str, installed: list[str]) -> bool:
     base = tag.split(":")[0]
-    return any(base in m for m in installed)
+    return any(m.split(":")[0] == base for m in installed)
 
 
 def _describe(tags: list[str]) -> str:
@@ -235,7 +236,7 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
             continue
         seen_installed_tags.add(m)
         installed_bases.add(m.split(":")[0])
-        desc = _describe(entry[1]) if entry else "general purpose"
+        desc = _describe(entry[1]) if entry else "general purpose (size unknown)"
         installed_opts.append((m, desc, False))
 
     # Descriptions already covered by installed models (for overlap detection)
@@ -312,8 +313,8 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
 
     choice = options[idx]
 
-    # Pull if not installed
-    if choice and not _is_installed(choice, models):
+    # Pull if the exact tag is not installed
+    if choice and choice not in models:
         entry = _catalog_entry(choice)
         size_hint = f" ({entry[2]})" if entry else ""
         if ask(f"\n  {choice}{size_hint} is not installed. Pull now? [y/N]", "N").lower() == "y":
@@ -406,9 +407,6 @@ def main_project() -> None:
     hw_for_q = dict(hw)
     hw_for_q["model"] = default_model or hw["model"]
     local_model = _pick_model_q(hw_for_q, models, ollama_up, q_label="Q2")
-    # אם לא בחרו שום דבר — קח את ברירת המחדל הגלובלית בלי לשאול שוב
-    if local_model == "" and default_model:
-        local_model = default_model
 
     write_config(config.PROJECT_CONFIG, priority, local_model)
     print(f"\nנכתב {config.PROJECT_CONFIG}")

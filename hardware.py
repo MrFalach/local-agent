@@ -2,10 +2,11 @@
 זיהוי חומרה — RAM → tier → המלצת מודל מקומי.
 
 tier לפי RAM זמין:
-  < 8 GB  → cloud-only (אין מספיק זיכרון)
-  8–16 GB → qwen2.5-coder:7b
+  < 8 GB   → cloud-only (אין מספיק זיכרון)
+  8–16 GB  → qwen2.5-coder:7b
   16–32 GB → qwen2.5-coder:14b
-  32 GB+  → qwen2.5-coder:32b
+  32–64 GB → qwen2.5-coder:32b
+  64 GB+   → qwen2.5-coder:72b
 """
 
 from __future__ import annotations
@@ -82,4 +83,4 @@ def detect() -> dict:
             return {"ram_gb": round(ram_gb, 1), "tier": tier, "model": model, "chip": chip}
 
     # לא אמור להגיע לכאן (inf תמיד תופס), אבל כ-fallback:
-    return {"ram_gb": round(ram_gb, 1), "tier": "32b", "model": "qwen2.5-coder:32b", "chip": chip}
+    return {"ram_gb": round(ram_gb, 1), "tier": "72b", "model": "qwen2.5-coder:72b", "chip": chip}

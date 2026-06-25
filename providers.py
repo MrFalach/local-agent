@@ -147,19 +147,21 @@ def chain(prompt: str, cfg: config.Config) -> ProviderResult:
     )
     body = ask_local(gen_prompt, cfg)
 
-    # מאחדים: התוצאה היא הקוד המקומי, אך סופרים את טוקני שני הצעדים לטלמטריה.
+    # Only cloud (planning) tokens are counted for cost — local generation is free.
     return ProviderResult(
         text=body.text,
         provider="chain",
         model=f"{cfg.cloud_model}+{cfg.local_model}",
-        in_tokens=plan.in_tokens + body.in_tokens,
-        out_tokens=plan.out_tokens + body.out_tokens,
+        in_tokens=plan.in_tokens,
+        out_tokens=plan.out_tokens,
         cached_tokens=plan.cached_tokens,
     )
 
 
 def warm_up(cfg: config.Config) -> None:
     """מחמם את המודל המקומי בעליית השרת כדי שהקריאה הראשונה לא תהיה cold-load."""
+    if not cfg.local_model:
+        return
     try:
         ollama.chat(
             model=cfg.local_model,

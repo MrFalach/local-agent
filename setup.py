@@ -205,8 +205,8 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
     recommended = hw["model"]
     chip = hw["chip"] or f"{ram_gb:.0f}GB RAM"
 
-    installed_opts:    list[tuple[str, str, bool]] = []   # (tag, desc, is_recommended)
-    downloadable_opts: list[tuple[str, str, str]]  = []   # (tag, desc, size)
+    installed_opts:    list[tuple[str, str, bool]] = []        # (tag, desc, is_recommended)
+    downloadable_opts: list[tuple[str, str, str, str]] = []   # (tag, desc, size, overlap_note)
     seen_installed_tags: set[str] = set()
     installed_bases:     set[str] = set()   # families already shown as installed
     seen_download_bases: set[str] = set()   # families already shown as downloadable
@@ -224,7 +224,7 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
             entry = _catalog_entry(recommended)
             size = entry[2] if entry else "?"
             tags = entry[1] if entry else ["code"]
-            downloadable_opts.append((recommended, _describe(tags), size))
+            downloadable_opts.append((recommended, _describe(tags), size, ""))
 
     # Other installed models that fit
     for m in models:
@@ -238,6 +238,17 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
         desc = _describe(entry[1]) if entry else "general purpose"
         installed_opts.append((m, desc, False))
 
+    # Descriptions already covered by installed models (for overlap detection)
+    # "general purpose" and "general & data analysis" are the same category
+    _GENERAL = {"general purpose", "general & data analysis"}
+    installed_descs = {d for _, d, _ in installed_opts}
+    def _overlap_note(desc: str) -> str:
+        if desc == "best for coding" and "best for coding" in installed_descs:
+            return "← overlaps with installed coding model"
+        if desc in _GENERAL and installed_descs & _GENERAL:
+            return "← overlaps with installed general model"
+        return ""
+
     # Uninstalled catalog models that fit (skip families already installed)
     for tag, req, tags, size in MODEL_CATALOG:
         if req > ram_gb:
@@ -246,12 +257,15 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
         if base in installed_bases or base in seen_download_bases:
             continue
         seen_download_bases.add(base)
-        downloadable_opts.append((tag, _describe(tags), size))
+        desc = _describe(tags)
+        downloadable_opts.append((tag, desc, size, _overlap_note(desc)))
 
     # --- Print grouped menu ---
     col_name = 28
     col_desc = 26
-    print(f"\n{q_label}. Local model — {chip}:\n")
+    print(f"\n{q_label}. Local model — {chip}, {ram_gb:.0f}GB RAM")
+    print(f"  All models listed below are compatible with your machine.")
+    print(f"  Models requiring more than {ram_gb:.0f}GB are hidden.\n")
 
     options: list[str] = []  # ordered list of model tags ("" = cloud only)
 
@@ -271,12 +285,15 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
 
     if downloadable_opts:
         _section("available to download")
-        for tag, desc, size in downloadable_opts:
+        print(f"  Tip: only one model runs in RAM at a time. Switching costs 20-40s cold-load.")
+        print(f"  Install one that covers your main use case; let cloud handle the rest.\n")
+        for tag, desc, size, note in downloadable_opts:
             n = len(options) + 1
             options.append(tag)
             size_gb = size.replace("~", "").replace("GB", " GB")
             dflt = "  (default)" if n == 1 else ""
-            print(f"  {n:2}) {tag:<{col_name}} {desc:<{col_desc}}  {size_gb}{dflt}")
+            overlap = f"  {note}" if note else ""
+            print(f"  {n:2}) {tag:<{col_name}} {desc:<{col_desc}}  {size_gb}{overlap}{dflt}")
         print()
 
     _section("skip local")

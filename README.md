@@ -1,101 +1,138 @@
 # local-agent
 
-פועל עם קלוד קוד ומנתב אוטומטית כל בקשה — משימות קוד פשוטות הולכות למודל מקומי על המחשב שלך (חינם), משימות מורכבות הולכות לקלוד בענן. בחירה אחת — מה הכי חשוב לך (איכות / עלות / מהירות) — מכתיבה את כל ההתנהגות.
+**Your AI runs locally when it can, and in the cloud when it needs to.**
+
+local-agent sits between you and Claude Code. Every request is automatically sent to the best place — simple coding tasks go to a free local model on your machine, complex questions go to Claude in the cloud. You don't decide; it decides for you.
+
+Once installed, it works automatically in every Claude Code session. No commands to remember.
 
 ---
 
-## איך זה עובד
+## How it works
 
 ```
-אתה שואל קלוד קוד משהו
-           ↓
-       local-agent  ──(מכויל לפי priority שלך)
-      ↙      ↓      ↘
-  מקומי    chain     ענן
- (חינם)  (ענן מתכנן  (רק לקשה)
-         מקומי מייצר)
+You ask Claude Code something
+              ↓
+        local-agent
+       ↙     ↓      ↘
+   local   chain    cloud
+  (free)  (plan    (only when
+          cloud +   needed)
+          run local)
 ```
 
-**מקומי** — כתיבת קוד, ריפקטורינג, בדיקות, תיעוד → מהיר, עולה אפס
-**ענן** — ארכיטקטורה, דיבוג עמוק, אבטחה, שאלות "למה" → איכות גבוהה
-**chain** — לייצור-קוד מכני אך גדול: הענן מתכנן בקצרה (זול), המקומי מייצר את הגוף (חינם)
+- **Local** — writing code, refactoring, tests, docs → free, instant
+- **Cloud** — architecture, deep debugging, security, "why" questions → best quality
+- **Chain** — cloud plans in a few lines, local generates the body → quality + savings
 
-הניתוב מבוסס על ציון 0..1 ("ענניוּת"). בקשה לא מזוהה/עמומה מקבלת 0.5, וה-priority מכריע: ב-`quality` היא עולה לענן, ב-`cost` היא נשארת מקומית.
+Every response starts with a short tag so you always know what happened:
+`[LOCAL qwen2.5-coder:14b · 1.8s · score 0.18]` → free, ran locally
+`[CLOUD claude-sonnet-4-6 · 3.4s · score 0.81]` → cloud, only the thinking costs
 
 ---
 
-## התקנה
+## Installation
 
-**דרישות:** קלוד קוד, פייתון 3.10+. אולמה — אופציונלי (בלעדיו עובד במצב ענן-בלבד).
+**Requirements:** Claude Code, Python 3.10+.
+**Optional:** [Ollama](https://ollama.com) — for local models (without it, everything goes to cloud).
 
 ```bash
 git clone https://github.com/MrFalach/local-agent.git
 cd local-agent
 pip install -r requirements.txt
-
-# (אופציונלי) מודל מקומי
-ollama pull qwen2.5-coder:7b
-
-# אשף ההתקנה — מזהה הכל, שואל ≤4 שאלות, רושם את הכלי אצל קלוד
 python setup.py
 ```
 
-האשף שואל: גלובלי או פרויקטלי, איזה מודל מקומי, ומה הכי חשוב לך. אם אין מפתח API הוא מבקש אותו; אם אין אולמה הוא עובר אוטומטית למצב ענן-בלבד. לסיום — הפעל מחדש את קלוד קוד.
+The setup wizard detects your hardware, shows a list of models that fit your machine, asks at most 4 questions, and registers the tool with Claude Code. Restart Claude Code when done — after that, everything is automatic.
 
 ---
 
-## כלים
+## Hardware-aware model selection
 
-| כלי | מה עושה |
-|-----|---------|
-| `local-agent:dev` | משימת פיתוח — ניתוב אוטומטי (כולל מסלול chain) |
-| `local-agent:ask` | שאלה טכנית — ניתוב אוטומטי |
-| `local-agent:local` | כפה מקומי |
-| `local-agent:cloud` | כפה ענן |
-| `local-agent:stats` | סיכום: נתח-ענן, זמני תגובה, cold-loads, עלות מוערכת |
+The wizard reads your RAM and shows only models that will actually run well on your machine. Larger models are hidden — no guessing.
 
-כל תשובה מתחילה בכותרת קצרה, למשל `[LOCAL qwen2.5-coder:7b · 2.3s · score 0.22]`.
+| RAM | Recommended model | Notes |
+|-----|-------------------|-------|
+| 8–16 GB | qwen2.5-coder:7b | solid coding model |
+| 16–32 GB | qwen2.5-coder:14b | better quality, still fast |
+| 32–64 GB | qwen2.5-coder:32b | high quality locally |
+| 64 GB+ | qwen2.5-coder:72b | near-cloud quality, free |
+| < 8 GB | — | cloud-only mode |
 
----
+The model list is grouped by what's already installed, what's available to download, and what would overlap with something you already have.
 
-## קדימות (priority) — הבחירה שמכתיבה הכל
-
-| priority | סף לענן | מודל ענן | timeout | chain | בקשה עמומה |
-|----------|---------|----------|---------|-------|-----------|
-| `quality` | 0.25 | claude-opus-4-8 | 60s | פעיל | → ענן |
-| `cost` *(ברירת מחדל)* | 0.60 | claude-sonnet-4-6 | 45s | פעיל | → מקומי |
-| `speed` | 0.45 | claude-sonnet-4-6 | 30s | כבוי | → ענן |
-| `balanced` | 0.45 | claude-sonnet-4-6 | 45s | פעיל | → ענן |
+> **Tip:** only one model runs in RAM at a time. Switching costs 20–40s cold-load. Pick one that covers your main use case and let cloud handle the rest.
 
 ---
 
-## הגדרות
+## Per-project configuration
 
-קדימויות הקונפיג (הגבוה גובר): משתני סביבה ← `./.local-agent.json` (פרויקט) ← `~/.claude/local-agent/config.json` (גלובלי) ← ברירות מחדל.
+Want different settings for a specific project? Run this inside that project's folder:
 
-`config.json` לדוגמה (האשף כותב אותו; אפשר לערוך ידנית):
-
-```json
-{
-  "priority": "cost",
-  "local_model": "qwen2.5-coder:7b",
-  "cloud_model": "claude-sonnet-4-6",
-  "telemetry": true
-}
+```bash
+cd ~/your-project
+python /path/to/local-agent/setup.py --project
 ```
 
-`local_model: ""` → מצב ענן-בלבד. שדות `cloud_threshold` / `timeout` / `chain` נגזרים מ-priority אם לא הוגדרו במפורש. המפתח `ANTHROPIC_API_KEY` נשמר ב-`.env` בלבד, לא ב-JSON.
+This asks 2 questions (priority + model), inherits everything else from your global config, and saves a `.local-agent.json` in that folder. Claude Code picks it up automatically.
 
 ---
 
-## מבנה
+## Priority — the one setting that drives everything
+
+| Priority | Behavior | Best for |
+|----------|----------|----------|
+| `quality` | goes to cloud easily | important projects, critical code |
+| `cost` *(default)* | stays local, cloud only when hard | daily work, saving money |
+| `speed` | fastest response, no chain | quick edits, high volume |
+| `balanced` | smart split | general use |
+
+---
+
+## Tools available in Claude Code
+
+| Tool | What it does |
+|------|-------------|
+| `local-agent:dev` | coding task — routed automatically |
+| `local-agent:ask` | technical question — routed automatically |
+| `local-agent:local` | force local model |
+| `local-agent:cloud` | force cloud |
+| `local-agent:stats` | summary: cloud share, response times, estimated cost |
+
+---
+
+## Configuration
+
+Settings are layered — higher overrides lower:
 
 ```
-setup.py       אשף התקנה אינטראקטיבי
-config.py      קונפיג רב-שכבתי + פרופילי priority
-server.py      שרת MCP + נקודת-חנק לטלמטריה
-router.py      ניתוב מנומק (ציון 0..1)
-providers.py   אולמה / אנתרופיק + מסלול chain
-telemetry.py   רישום JSONL + stats
-CLAUDE.md      הוראות לקלוד קוד
+environment variables
+  └── .local-agent.json   (current project folder)
+        └── ~/.claude/local-agent/config.json   (global)
+              └── built-in defaults
 ```
+
+The global config is written by `python setup.py`. The project config by `python setup.py --project`. You can also edit either JSON file directly.
+
+`ANTHROPIC_API_KEY` is stored in `.env` only, never in JSON files.
+
+---
+
+## File overview
+
+```
+setup.py      interactive setup wizard
+hardware.py   detect RAM → recommended model
+config.py     multi-layer config + priority profiles
+server.py     MCP server (entry point for Claude Code)
+router.py     routing logic (score 0..1)
+providers.py  Ollama + Anthropic + chain route
+telemetry.py  JSONL logging + stats
+CLAUDE.md     instructions for Claude Code
+```
+
+---
+
+## License
+
+MIT

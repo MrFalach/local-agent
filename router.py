@@ -1,11 +1,19 @@
 """
-מנתב משימות: מחליט אוטומטית בין מודל מקומי לענן.
+מנתב משימות: מחליט בין מודל מקומי לענן ומחזיר החלטה מנומקת (לא רק מחרוזת).
 
 לוגיקה:
-- אותות מורכבות (ארכיטקטורה, אבטחה, למה, debug) → ענן
-- אותות פשוטות (כתוב, צור, פרמט, שנה שם) → מקומי
-- הודעה ארוכה מ-400 תווים → נקודה נוספת לענן
+- סופרים אותות-ענן (ארכיטקטורה, אבטחה, למה, debug...) מול אותות-מקומי (כתוב, צור, פרמט...).
+- score = cloud_pts / (cloud_pts + local_pts)  →  "ענניוּת" בטווח 0..1.
+- prompt לא מזוהה / עמום (0/0) מקבל score=0.5 — כלומר "לא יודע", ואז הסף מכריע.
+- ננתב לענן אם score >= cloud_threshold (מגיע מהקונפיג, נגזר מ-priority).
+
+הערה מהותית: ביטלנו את חוקיית "אורך > 400 תווים → ענן". אורך לא מנבא קושי
+ולא צורך-בחשיבה (config ארוך ומכני הולך לענן בטעות; "למה זה נתקע?" קצר נשאר מקומי).
 """
+
+from __future__ import annotations
+
+from dataclasses import dataclass
 
 CLOUD_SIGNALS = [
     # עברית
@@ -28,16 +36,47 @@ LOCAL_SIGNALS = [
     "refactor", "convert", "translate", "stub", "mock",
 ]
 
+# פעלים מכניים של ייצור-קוד — רמז ש-chain (ענן מתכנן → מקומי מייצר) עשוי להשתלם.
+CODEGEN_VERBS = [
+    "write", "generate", "create", "scaffold", "refactor", "implement",
+    "כתוב", "צור", "שלד", "ממש",
+]
 
-def route(prompt: str) -> str:
-    """מחזיר 'local' או 'cloud'."""
+
+@dataclass
+class RouteDecision:
+    label: str            # "local" | "cloud"
+    score: float          # ענניוּת 0..1
+    cloud_hits: int
+    local_hits: int
+    matched: list[str]    # אילו אותות נמצאו (לטלמטריה/דיבוג)
+    codegen: bool         # האם נראה כמו ייצור-קוד מכני (רלוונטי ל-chain)
+
+
+def _matched_signals(lower: str, signals: list[str]) -> list[str]:
+    return [s for s in signals if s in lower]
+
+
+def route(prompt: str, cloud_threshold: float = 0.45) -> RouteDecision:
+    """מחזיר RouteDecision לפי הסף שהתקבל מהקונפיג."""
     lower = prompt.lower()
 
-    cloud_score = sum(1 for s in CLOUD_SIGNALS if s in lower)
-    local_score = sum(1 for s in LOCAL_SIGNALS if s in lower)
+    cloud_matched = _matched_signals(lower, CLOUD_SIGNALS)
+    local_matched = _matched_signals(lower, LOCAL_SIGNALS)
+    cloud_pts = len(cloud_matched)
+    local_pts = len(local_matched)
 
-    if len(prompt) > 400:
-        cloud_score += 2
+    total = cloud_pts + local_pts
+    score = 0.5 if total == 0 else cloud_pts / total  # 0/0 = "לא יודע" → הסף מכריע
 
-    # שוויון (כולל 0/0) → מקומי: ברירת מחדל חסכונית
-    return "cloud" if cloud_score > local_score else "local"
+    label = "cloud" if score >= cloud_threshold else "local"
+    codegen = any(v in lower for v in CODEGEN_VERBS)
+
+    return RouteDecision(
+        label=label,
+        score=round(score, 3),
+        cloud_hits=cloud_pts,
+        local_hits=local_pts,
+        matched=cloud_matched + local_matched,
+        codegen=codegen,
+    )

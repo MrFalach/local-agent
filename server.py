@@ -10,7 +10,10 @@
 """
 
 import asyncio
+import datetime
+import json
 import time
+from pathlib import Path
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -20,6 +23,17 @@ import config
 import providers
 import telemetry
 from router import route
+
+_STATUS_PATH = Path.home() / ".claude" / "local-agent" / "status.json"
+
+
+def _write_status(data: dict) -> None:
+    try:
+        data["ts"] = datetime.datetime.now().isoformat(timespec="seconds")
+        _STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _STATUS_PATH.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
 
 app = Server("local-agent")
 
@@ -36,6 +50,8 @@ TOOL_MAP = {
 
 def _run(prompt: str, tool: str, forced: str | None) -> str:
     """מבצע קריאה אחת, רושם טלמטריה בנקודת-החנק, ומחזיר טקסט עם כותרת קצרה."""
+    _write_status({"phase": "routing"})
+
     decision = None
     if forced:
         provider = forced
@@ -46,6 +62,8 @@ def _run(prompt: str, tool: str, forced: str | None) -> str:
             provider = "chain"
         else:
             provider = decision.label
+
+    _write_status({"phase": "calling", "provider": provider})
 
     start = time.perf_counter()
     ok, error = True, None
@@ -59,12 +77,19 @@ def _run(prompt: str, tool: str, forced: str | None) -> str:
     except Exception as e:
         ok, error = False, str(e)
         latency_ms = (time.perf_counter() - start) * 1000
+        _write_status({"phase": "error", "provider": provider, "error": str(e)})
         _log(tool, provider, decision, prompt, latency_ms, None, ok, error)
         if not isinstance(e, RuntimeError):
             raise RuntimeError(str(e)) from e
         raise
 
     latency_ms = (time.perf_counter() - start) * 1000
+    _write_status({
+        "phase": "done",
+        "provider": result.provider,
+        "model": result.model,
+        "latency_ms": round(latency_ms),
+    })
     _log(tool, provider, decision, prompt, latency_ms, result, ok, error)
 
     tag = f"[{result.provider.upper()} {result.model} · {latency_ms / 1000:.1f}s"

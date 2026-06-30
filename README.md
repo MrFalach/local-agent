@@ -30,6 +30,12 @@
 [CHAIN ... · 5.1s · score 0.74]                 ← שניהם יחד
 ```
 
+בתחילת כל סשן מופיעה שורת סיכום יומית:
+
+```
+⚡ local-agent: 18 calls today · 83% local · 3 cloud · ~$0.012 spent
+```
+
 ---
 
 ## התקנה
@@ -40,18 +46,19 @@
 ```bash
 git clone https://github.com/MrFalach/local-agent.git
 cd local-agent
-pip install -r requirements.txt
-python setup.py
+python3 setup.py
 ```
 
-האשף שואל אותך עד 4 שאלות:
+זה הכל. האשף:
+- מתקין את כל התלויות אוטומטית
+- רושם את השרת ב-Claude Code (כך שיהיה זמין בכל פרויקט)
+- שואל עד 4 שאלות:
+  1. גלובלי (כל הפרויקטים) או לפרויקט הנוכחי בלבד?
+  2. איזה מודל מקומי? (רשימה מותאמת אוטומטית למחשב שלך)
+  3. מה הכי חשוב — איכות / חיסכון / מהירות / מאוזן?
+  4. מפתח API של Anthropic (אם עוד אין)
 
-1. גלובלי (כל הפרויקטים) או לפרויקט הנוכחי בלבד?
-2. איזה מודל מקומי? (רשימה מותאמת אוטומטית למחשב שלך)
-3. מה הכי חשוב — איכות / חיסכון / מהירות / מאוזן?
-4. מפתח API של Anthropic (אם עוד אין)
-
-בסוף הוא מגדיר את הכל ב-Claude Code. צריך להפעיל מחדש את Claude Code אחרי שגמרת.
+בסוף צריך להפעיל מחדש את Claude Code כדי שהשרת יטען.
 
 ---
 
@@ -125,13 +132,14 @@ python /path/to/local-agent/setup.py --project
 ## קבצים בפרויקט
 
 ```
-setup.py      אשף ההתקנה (זיהוי חומרה, קטלוג מודלים, מצב --project)
+setup.py      אשף ההתקנה (deps, רישום MCP, זיהוי חומרה, קטלוג מודלים)
 hardware.py   זיהוי RAM → המלצת מודל מתאים
 config.py     טעינת קונפיג רב-שכבתי + פרופילי עדיפות
 server.py     שרת MCP — נקודת הכניסה ל-Claude Code
 router.py     לוגיקת ניתוב (ציון 0..1 לפי מילות מפתח ומורכבות)
 providers.py  חיבור לאולמה + Anthropic + מסלול chain
-telemetry.py  תיעוד JSONL + סיכום סטטיסטיקות
+telemetry.py  תיעוד JSONL עם timestamps + סיכום סטטיסטיקות
+.mcp.json     רישום MCP ברמת הפרויקט (auto-discovery)
 CLAUDE.md     הוראות ניתוב מוטמעות ל-Claude Code עצמו
 ```
 

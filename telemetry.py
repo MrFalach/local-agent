@@ -7,6 +7,7 @@ stats() קורא את הקובץ ומחזיר סיכום קריא (נתח-ענן
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -19,6 +20,7 @@ _PRICE_PER_MTOK = {"input": 3.0, "output": 15.0}
 def record(event: dict) -> None:
     """מוסיף שורת JSONL אחת. נכשל בשקט — טלמטריה לעולם לא מפילה קריאה אמיתית."""
     try:
+        event.setdefault("ts", datetime.datetime.now().isoformat(timespec="seconds"))
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with LOG_PATH.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")

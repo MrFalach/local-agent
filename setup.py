@@ -148,18 +148,47 @@ def write_key(key: str) -> None:
     env.chmod(0o600)
 
 
+def install_deps() -> None:
+    req = SERVER_PATH.parent / "requirements.txt"
+    if not req.exists():
+        return
+    print("\n[deps] Installing Python dependencies...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", str(req), "-q"],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print("[deps] ✓ Done")
+    else:
+        print(f"[deps] ⚠ pip failed — run manually: pip install -r requirements.txt\n{result.stderr.strip()}")
+
+
+def _mcp_already_registered() -> bool:
+    try:
+        result = subprocess.run(
+            ["claude", "mcp", "list"], capture_output=True, text=True, timeout=8
+        )
+        return "local-agent" in result.stdout
+    except Exception:
+        return False
+
+
 def register(scope: str) -> None:
     mcp_scope = "user" if scope == "global" else "project"
     cmd = ["claude", "mcp", "add", "--scope", mcp_scope,
            "local-agent", "python3", str(SERVER_PATH)]
-    printable = " ".join(cmd)
     if not shutil.which("claude"):
-        print(f"\n  ה-CLI של קלוד לא נמצא ב-PATH. הרץ ידנית לאחר ההתקנה:\n    {printable}")
+        print(f"\n[mcp] Claude CLI not found. Register manually after install:\n    {' '.join(cmd)}")
         return
-    if ask(f"\n  לרשום עכשיו?\n    {printable}\n  [y/N]", "N").lower() == "y":
-        subprocess.run(cmd, check=False)
+    if _mcp_already_registered():
+        print("\n[mcp] ✓ local-agent already registered — skipping")
+        return
+    print(f"\n[mcp] Registering MCP server ({mcp_scope} scope)...")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        print("[mcp] ✓ Registered. Restart Claude Code to activate.")
     else:
-        print(f"  דלגתי. להרצה ידנית:\n    {printable}")
+        print(f"[mcp] ⚠ Registration failed:\n{result.stderr.strip()}\n  Manual command:\n    {' '.join(cmd)}")
 
 
 def _catalog_entry(tag: str) -> tuple[int, list[str], str] | None:
@@ -328,6 +357,7 @@ def _pick_model_q(hw: dict, models: list[str], ollama_up: bool, q_label: str = "
 def main_global() -> None:
     """אשף גלובלי מלא."""
     print("local-agent setup\n")
+    install_deps()
     hw = hardware.detect()
     ollama_up, models = detect_ollama()
     has_key = detect_key()

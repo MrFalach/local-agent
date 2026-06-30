@@ -200,8 +200,7 @@ def _catalog_entry(tag: str) -> tuple[int, list[str], str] | None:
 
 
 def _is_installed(tag: str, installed: list[str]) -> bool:
-    base = tag.split(":")[0]
-    return any(m.split(":")[0] == base for m in installed)
+    return tag in installed
 
 
 def _describe(tags: list[str]) -> str:
